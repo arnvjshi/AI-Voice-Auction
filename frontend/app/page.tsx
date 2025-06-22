@@ -52,38 +52,35 @@ export default function HomePage() {
 
   return (
     <div className="relative overflow-hidden">
-      {/* Animated Background */}
-      <div className="absolute inset-0 bg-gradient-to-br from-blue-50/50 via-purple-50/30 to-pink-50/50 dark:from-blue-950/20 dark:via-purple-950/10 dark:to-pink-950/20" />
-      <div className="absolute inset-0 bg-grid-pattern opacity-5" />
-
       <div className="relative container mx-auto px-4 py-12">
         {/* Hero Section */}
         <div
           className={`text-center mb-20 transition-all duration-1000 ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-10"}`}
         >
-          <Badge variant="secondary" className="mb-6 px-4 py-2 text-sm font-medium animate-pulse">
+          <Badge variant="secondary" className="mb-6 px-4 py-2 text-sm font-medium animate-pulse glow-subtle mx-auto">
             <Sparkles className="h-4 w-4 mr-2" />
             Now with Advanced AI Voice Recognition
           </Badge>
 
-          <h1 className="text-5xl md:text-7xl font-bold mb-6 leading-tight">
-            <span className="bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text animate-gradient text-black">
-              Voice Auction
-            </span>
-            <br />
-            <span className="text-primary">Revolution</span>
-          </h1>
+          {/* Hero title with better contrast and backdrop */}
+          <div className="content-backdrop mb-8 block">
+            <h1 className="text-5xl md:text-7xl font-bold mb-6 leading-tight">
+              <span className="text-hero">Voice Auction</span>
+              <br />
+              <span className="text-primary animate-breathe">Revolution</span>
+            </h1>
 
-          <p className="text-xl md:text-2xl text-muted-foreground mb-8 max-w-3xl mx-auto leading-relaxed">
-            Experience the future of online auctions with our revolutionary AI-powered voice agent. Bid in real-time,
-            get instant updates, and never miss an opportunity.
-          </p>
+            <p className="text-xl md:text-2xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
+              Experience the future of online auctions with our revolutionary AI-powered voice agent. Bid in real-time,
+              get instant updates, and never miss an opportunity.
+            </p>
+          </div>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-12">
             <Link href="/auction">
               <Button
                 size="lg"
-                className="text-lg px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl"
+                className="text-lg px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 btn-hover glow-subtle shadow-lg hover:shadow-xl"
               >
                 <Play className="mr-2 h-5 w-5" />
                 Enter Auction Room
@@ -91,11 +88,7 @@ export default function HomePage() {
               </Button>
             </Link>
 
-            <Button
-              variant="outline"
-              size="lg"
-              className="text-lg px-8 py-4 hover:bg-accent transition-all duration-200"
-            >
+            <Button variant="outline" size="lg" className="text-lg px-8 py-4 btn-hover glass">
               <Mic className="mr-2 h-5 w-5" />
               Try Voice Demo
             </Button>
@@ -105,7 +98,7 @@ export default function HomePage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6 max-w-4xl mx-auto">
             {stats.map((stat, index) => (
               <div key={index} className="text-center group">
-                <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-gradient-to-br from-primary/10 to-primary/20 mb-3 group-hover:scale-110 transition-transform">
+                <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-gradient-to-br from-primary/10 to-primary/20 mb-3 group-hover:scale-110 transition-transform glow-subtle">
                   <stat.icon className="h-6 w-6 text-primary" />
                 </div>
                 <div className="text-2xl font-bold text-foreground">{stat.value}</div>
@@ -128,7 +121,7 @@ export default function HomePage() {
             {features.map((feature, index) => (
               <Card
                 key={index}
-                className={`relative overflow-hidden border-0 shadow-lg hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2 ${feature.bgColor} ${activeFeature === index ? "ring-2 ring-primary scale-105" : ""}`}
+                className={`relative overflow-hidden border-0 shadow-lg hover:shadow-2xl card-hover glass ${feature.bgColor} ${activeFeature === index ? "ring-2 ring-primary scale-105 glow-subtle" : ""}`}
               >
                 <div className="absolute top-0 right-0 w-32 h-32 opacity-10">
                   <div className={`w-full h-full rounded-full bg-gradient-to-br ${feature.color}`} />
@@ -136,7 +129,7 @@ export default function HomePage() {
 
                 <CardHeader className="relative">
                   <div
-                    className={`inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br ${feature.color} mb-4 shadow-lg`}
+                    className={`inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br ${feature.color} mb-4 shadow-lg glow-subtle`}
                   >
                     <feature.icon className="h-8 w-8 text-white" />
                   </div>
@@ -177,7 +170,7 @@ export default function HomePage() {
             ].map((item, index) => (
               <div key={index} className="text-center group">
                 <div className="relative mb-6">
-                  <div className="w-20 h-20 bg-gradient-to-br from-primary to-purple-600 rounded-full flex items-center justify-center mx-auto shadow-lg group-hover:scale-110 transition-transform">
+                  <div className="w-20 h-20 bg-gradient-to-br from-primary to-purple-600 rounded-full flex items-center justify-center mx-auto shadow-lg group-hover:scale-110 transition-transform glow-subtle">
                     <span className="text-3xl">{item.icon}</span>
                   </div>
                   <div className="absolute -top-2 -right-2 w-8 h-8 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-lg">
@@ -192,7 +185,7 @@ export default function HomePage() {
         </div>
 
         {/* CTA Section */}
-        <div className="text-center bg-gradient-to-r from-blue-600/10 via-purple-600/10 to-pink-600/10 rounded-3xl p-12 border border-primary/20">
+        <div className="text-center glass rounded-3xl p-12 border border-primary/20 glow-subtle">
           <h2 className="text-3xl font-bold mb-4">Ready to Start Bidding?</h2>
           <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
             Join thousands of users who are already experiencing the future of online auctions
@@ -201,13 +194,13 @@ export default function HomePage() {
             <Link href="/auction">
               <Button
                 size="lg"
-                className="text-lg px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 transform hover:scale-105 transition-all duration-200 shadow-lg"
+                className="text-lg px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 btn-hover glow-subtle shadow-lg"
               >
                 <Gavel className="mr-2 h-5 w-5" />
                 Start Bidding Now
               </Button>
             </Link>
-            <Button variant="outline" size="lg" className="text-lg px-8 py-4">
+            <Button variant="outline" size="lg" className="text-lg px-8 py-4 btn-hover glass">
               <Shield className="mr-2 h-5 w-5" />
               Learn More
             </Button>

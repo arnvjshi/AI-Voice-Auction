@@ -75,14 +75,19 @@ const mockBiddingHistory = [
 ]
 
 export async function GET() {
-  // Simulate real-time updates by slightly modifying data
-  const updatedAuctions = mockAuctions.map((auction) => ({
-    ...auction,
-    timeRemaining: Math.max(0, auction.timeRemaining - Math.floor(Math.random() * 10)),
-  }))
+  try {
+    // Simulate real-time updates by slightly modifying data
+    const updatedAuctions = mockAuctions.map((auction) => ({
+      ...auction,
+      timeRemaining: Math.max(0, auction.timeRemaining - Math.floor(Math.random() * 10)),
+    }))
 
-  return NextResponse.json({
-    auctions: updatedAuctions,
-    biddingHistory: mockBiddingHistory,
-  })
+    return NextResponse.json({
+      auctions: updatedAuctions,
+      biddingHistory: mockBiddingHistory,
+    })
+  } catch (error) {
+    console.error("Error in GET /api/auctions:", error)
+    return NextResponse.json({ error: "Failed to fetch auction data" }, { status: 500 })
+  }
 }
