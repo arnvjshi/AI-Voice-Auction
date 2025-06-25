@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { Navbar } from "@/components/navbar"
 import { AuctionCard } from "@/components/auction-card"
 import { Button } from "@/components/ui/button"
@@ -24,6 +24,8 @@ import {
   Target,
   Activity,
   Trophy,
+  Wifi,
+  WifiOff,
 } from "lucide-react"
 
 interface AuctionItem {
@@ -106,6 +108,8 @@ export default function BiddingDashboard() {
     stopAt: 1000,
   })
   const [loading, setLoading] = useState(true)
+  const [isConnected, setIsConnected] = useState(false)
+  const [lastUpdate, setLastUpdate] = useState<number>(0)
 
   const [notifications, setNotifications] = useState([
     {
@@ -122,8 +126,71 @@ export default function BiddingDashboard() {
 
   const [showNotifications, setShowNotifications] = useState(false)
 
+  // Real-time data fetching with EventSource
   useEffect(() => {
-    fetchInitialData()
+    let eventSource: EventSource | null = null
+    let reconnectTimeout: NodeJS.Timeout | null = null
+
+    const connectEventSource = () => {
+      console.log("Connecting to real-time updates...")
+      eventSource = new EventSource("/api/auction/stream")
+
+      eventSource.onopen = () => {
+        console.log("Real-time connection established")
+        setIsConnected(true)
+        if (reconnectTimeout) {
+          clearTimeout(reconnectTimeout)
+          reconnectTimeout = null
+        }
+      }
+
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data)
+          console.log("Received real-time update:", data.type)
+
+          if (data.type === "auction_update") {
+            setAuctions(data.auctions)
+            setLastUpdate(data.timestamp)
+            console.log("Auctions updated:", data.auctions.length, "items")
+          } else if (data.type === "heartbeat") {
+            console.log("Heartbeat received")
+          }
+        } catch (error) {
+          console.error("Error parsing SSE data:", error)
+        }
+      }
+
+      eventSource.onerror = (error) => {
+        console.error("EventSource error:", error)
+        setIsConnected(false)
+        eventSource?.close()
+
+        // Reconnect after 3 seconds
+        if (!reconnectTimeout) {
+          reconnectTimeout = setTimeout(() => {
+            console.log("Attempting to reconnect...")
+            connectEventSource()
+          }, 3000)
+        }
+      }
+    }
+
+    // Initial data fetch
+    fetchInitialData().then(() => {
+      setLoading(false)
+      // Start real-time connection after initial data is loaded
+      connectEventSource()
+    })
+
+    return () => {
+      if (eventSource) {
+        eventSource.close()
+      }
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout)
+      }
+    }
   }, [])
 
   useEffect(() => {
@@ -131,27 +198,41 @@ export default function BiddingDashboard() {
   }, [auctions, searchTerm, selectedCategory, sortBy, priceRange])
 
   const fetchInitialData = async () => {
-    setLoading(true)
     try {
+      console.log("Fetching initial data...")
+
       // Fetch auctions
       const auctionsResponse = await fetch("/api/auction/list")
       const auctionsData = await auctionsResponse.json()
       setAuctions(auctionsData.auctions)
+      console.log("Initial auctions loaded:", auctionsData.auctions.length)
 
       // Fetch user data
-      const userResponse = await fetch("/api/user/bids")
-      const userData = await userResponse.json()
-      setUserBids(userData.bids)
-      setWatchlist(userData.watchlist)
-      setUserStats(userData.stats)
+      try {
+        const userResponse = await fetch("/api/user/bids")
+        const userData = await userResponse.json()
+        setUserBids(userData.bids || [])
+        setWatchlist(userData.watchlist || [])
+        setUserStats(
+          userData.stats || {
+            totalBids: 0,
+            wonAuctions: 0,
+            watchlistItems: 0,
+            successRate: 0,
+            totalSpent: 0,
+            avgBid: 0,
+          },
+        )
+        console.log("User data loaded")
+      } catch (userError) {
+        console.log("User data not available, using defaults")
+      }
     } catch (error) {
       console.error("Failed to fetch initial data:", error)
-    } finally {
-      setLoading(false)
     }
   }
 
-  const filterAndSortAuctions = () => {
+  const filterAndSortAuctions = useCallback(() => {
     const filtered = auctions.filter((auction) => {
       const matchesSearch =
         auction.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -184,10 +265,12 @@ export default function BiddingDashboard() {
     }
 
     setFilteredAuctions(filtered)
-  }
+  }, [auctions, searchTerm, selectedCategory, sortBy, priceRange])
 
   const handleBidPlaced = async (auctionId: string, amount: number, isAutoBid = false) => {
     try {
+      console.log(`Placing bid: $${amount} on auction ${auctionId}`)
+
       const response = await fetch("/api/auction/bid", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -203,8 +286,7 @@ export default function BiddingDashboard() {
       const data = await response.json()
 
       if (data.success) {
-        // Refresh data after successful bid
-        await fetchInitialData()
+        console.log("Bid placed successfully:", data.message)
 
         // Show success notification
         const newNotification = {
@@ -218,7 +300,11 @@ export default function BiddingDashboard() {
           urgent: false,
         }
         setNotifications((prev) => [newNotification, ...prev])
+
+        // The real-time update will automatically refresh the data
+        // No need to manually fetch data here
       } else {
+        console.error("Bid failed:", data.error)
         alert(data.error || "Failed to place bid")
       }
     } catch (error) {
@@ -325,6 +411,22 @@ export default function BiddingDashboard() {
           <div>
             <h1 className="text-4xl font-bold gradient-text mb-2">Bidding Dashboard</h1>
             <p className="text-lg text-gray-600">Manage your bids, watchlist, and auction activity</p>
+            <div className="flex items-center gap-2 mt-2">
+              {isConnected ? (
+                <div className="flex items-center gap-2 text-green-600">
+                  <Wifi className="h-4 w-4" />
+                  <span className="text-sm">Live Updates Active</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 text-red-600">
+                  <WifiOff className="h-4 w-4" />
+                  <span className="text-sm">Reconnecting...</span>
+                </div>
+              )}
+              {lastUpdate > 0 && (
+                <span className="text-xs text-gray-500">Last update: {new Date(lastUpdate).toLocaleTimeString()}</span>
+              )}
+            </div>
           </div>
 
           <div className="flex items-center gap-4">
@@ -593,7 +695,7 @@ export default function BiddingDashboard() {
               <h3 className="text-2xl font-bold text-gray-900">Live Auctions ({activeAuctions.length})</h3>
               <div className="flex items-center gap-2 text-sm text-gray-600">
                 <Clock className="h-4 w-4" />
-                Updated every 30 seconds
+                Real-time updates
               </div>
             </div>
 

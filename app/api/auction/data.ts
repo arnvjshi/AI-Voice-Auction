@@ -515,19 +515,63 @@ let auctionData = [
   },
 ]
 
+// Real-time update subscribers
+const subscribers = new Set<(data: any) => void>()
+
+// Subscribe to real-time updates
+export function subscribeToUpdates(callback: (data: any) => void) {
+  subscribers.add(callback)
+  return () => subscribers.delete(callback)
+}
+
+// Broadcast updates to all subscribers
+function broadcastUpdate() {
+  const updateData = {
+    type: "auction_update",
+    auctions: auctionData,
+    stats: {
+      totalItems: auctionData.length,
+      activeBids: auctionData.filter((a) => a.status === "active").reduce((sum, a) => sum + a.totalBids, 0),
+      totalRevenue: auctionData.reduce((sum, a) => sum + a.currentBid, 0),
+      activeUsers: new Set(auctionData.flatMap((a) => a.bidHistory.map((b) => b.bidder))).size,
+    },
+    timestamp: Date.now(),
+  }
+
+  subscribers.forEach((callback) => {
+    try {
+      callback(updateData)
+    } catch (error) {
+      console.error("Error broadcasting update:", error)
+    }
+  })
+}
+
 // Simulate time countdown
 setInterval(() => {
+  let hasChanges = false
   auctionData = auctionData.map((auction) => {
     if (auction.status === "active" && auction.timeRemaining > 0) {
       const newTimeRemaining = Math.max(0, auction.timeRemaining - 1)
+      const newStatus = newTimeRemaining === 0 ? ("ended" as const) : ("active" as const)
+
+      if (newTimeRemaining !== auction.timeRemaining || newStatus !== auction.status) {
+        hasChanges = true
+      }
+
       return {
         ...auction,
         timeRemaining: newTimeRemaining,
-        status: newTimeRemaining === 0 ? ("ended" as const) : ("active" as const),
+        status: newStatus,
       }
     }
     return auction
   })
+
+  // Only broadcast if there were actual changes
+  if (hasChanges) {
+    broadcastUpdate()
+  }
 }, 1000)
 
 export async function getAuctionData() {
@@ -562,61 +606,75 @@ export async function placeBid(
     bidderAvatar?: string
   } = {},
 ) {
-  const auctionIndex = auctionData.findIndex((a) => a.id === auctionId)
+  try {
+    const auctionIndex = auctionData.findIndex((a) => a.id === auctionId)
 
-  if (auctionIndex === -1) {
-    return { success: false, error: "Auction not found" }
-  }
-
-  const auction = auctionData[auctionIndex]
-
-  if (auction.status !== "active" || auction.timeRemaining <= 0) {
-    return { success: false, error: "Auction has ended" }
-  }
-
-  if (amount <= auction.currentBid) {
-    return {
-      success: false,
-      error: `Bid must be higher than current bid of $${auction.currentBid}`,
+    if (auctionIndex === -1) {
+      return { success: false, error: "Auction not found" }
     }
-  }
 
-  // Create new bid
-  const newBid = {
-    id: `bid-${Date.now()}`,
-    amount,
-    timestamp: Date.now(),
-    bidder,
-    bidderAvatar: options.bidderAvatar || "/placeholder.svg?height=40&width=40",
-    bidType: options.autoBid ? "auto" : "manual",
-    maxBid: options.maxBid,
-  }
+    const auction = auctionData[auctionIndex]
 
-  // Update auction
-  auctionData[auctionIndex] = {
-    ...auction,
-    currentBid: amount,
-    totalBids: auction.totalBids + 1,
-    bidHistory: [...auction.bidHistory, newBid],
-  }
+    if (auction.status !== "active" || auction.timeRemaining <= 0) {
+      return { success: false, error: "Auction has ended" }
+    }
 
-  // Import and add to user bids
-  const { addUserBid } = await import("../user/data")
-  await addUserBid({
-    auctionId,
-    auctionName: auction.name,
-    amount,
-    timestamp: Date.now(),
-    status: "winning",
-    maxBid: options.maxBid,
-    autoBid: options.autoBid,
-    bidder,
-  })
+    if (amount <= auction.currentBid) {
+      return {
+        success: false,
+        error: `Bid must be higher than current bid of $${auction.currentBid}`,
+      }
+    }
 
-  return {
-    success: true,
-    auction: auctionData[auctionIndex],
-    bid: newBid,
+    // Create new bid
+    const newBid = {
+      id: `bid-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      amount,
+      timestamp: Date.now(),
+      bidder,
+      bidderAvatar: options.bidderAvatar || "/placeholder.svg?height=40&width=40",
+      bidType: options.autoBid ? "auto" : "manual",
+      maxBid: options.maxBid,
+    }
+
+    // Update auction
+    auctionData[auctionIndex] = {
+      ...auction,
+      currentBid: amount,
+      totalBids: auction.totalBids + 1,
+      bidHistory: [...auction.bidHistory, newBid],
+    }
+
+    console.log(`Bid placed successfully: $${amount} on ${auction.name} by ${bidder}`)
+
+    // Add to user bids
+    try {
+      const { addUserBid } = await import("../user/data")
+      await addUserBid({
+        auctionId,
+        auctionName: auction.name,
+        amount,
+        timestamp: Date.now(),
+        status: "winning",
+        maxBid: options.maxBid,
+        autoBid: options.autoBid,
+        bidder,
+      })
+    } catch (error) {
+      console.log("Note: User bid tracking not available, but auction bid was successful")
+    }
+
+    // Broadcast real-time update immediately
+    broadcastUpdate()
+
+    return {
+      success: true,
+      auction: auctionData[auctionIndex],
+      bid: newBid,
+    }
+  } catch (error) {
+    console.error("Error in placeBid:", error)
+    return { success: false, error: "Internal server error while placing bid" }
   }
 }
 
@@ -636,6 +694,9 @@ export async function updateAuctionFromAgent(auctionId: string, updates: any) {
     id: auctionData[auctionIndex].id,
     bidHistory: auctionData[auctionIndex].bidHistory,
   }
+
+  // Broadcast update
+  broadcastUpdate()
 
   return {
     success: true,
