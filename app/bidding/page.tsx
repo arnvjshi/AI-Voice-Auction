@@ -73,13 +73,13 @@ interface WatchlistItem {
   addedAt: number
 }
 
-interface NotificationItem {
-  id: string
-  type: "outbid" | "winning" | "ending" | "info"
-  message: string
-  timestamp: number
-  read: boolean
-  auctionId: string
+interface UserStats {
+  totalBids: number
+  wonAuctions: number
+  watchlistItems: number
+  successRate: number
+  totalSpent: number
+  avgBid: number
 }
 
 export default function BiddingDashboard() {
@@ -87,6 +87,14 @@ export default function BiddingDashboard() {
   const [filteredAuctions, setFilteredAuctions] = useState<AuctionItem[]>([])
   const [userBids, setUserBids] = useState<UserBid[]>([])
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([])
+  const [userStats, setUserStats] = useState<UserStats>({
+    totalBids: 0,
+    wonAuctions: 0,
+    watchlistItems: 0,
+    successRate: 0,
+    totalSpent: 0,
+    avgBid: 0,
+  })
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedCategory, setSelectedCategory] = useState("all")
   const [sortBy, setSortBy] = useState("ending-soon")
@@ -97,6 +105,7 @@ export default function BiddingDashboard() {
     maxIncrease: 50,
     stopAt: 1000,
   })
+  const [loading, setLoading] = useState(true)
 
   const [notifications, setNotifications] = useState([
     {
@@ -113,45 +122,32 @@ export default function BiddingDashboard() {
 
   const [showNotifications, setShowNotifications] = useState(false)
 
-  // Mock user data
-  const [userStats] = useState({
-    totalBids: 47,
-    wonAuctions: 12,
-    watchlistItems: 8,
-    successRate: 85,
-    totalSpent: 15420,
-    avgBid: 327,
-  })
-
   useEffect(() => {
-    fetchAuctions()
-    loadUserData()
+    fetchInitialData()
   }, [])
 
   useEffect(() => {
     filterAndSortAuctions()
   }, [auctions, searchTerm, selectedCategory, sortBy, priceRange])
 
-  const fetchAuctions = async () => {
+  const fetchInitialData = async () => {
+    setLoading(true)
     try {
-      const response = await fetch("/api/auction/list")
-      const data = await response.json()
-      setAuctions(data.auctions)
+      // Fetch auctions
+      const auctionsResponse = await fetch("/api/auction/list")
+      const auctionsData = await auctionsResponse.json()
+      setAuctions(auctionsData.auctions)
+
+      // Fetch user data
+      const userResponse = await fetch("/api/user/bids")
+      const userData = await userResponse.json()
+      setUserBids(userData.bids)
+      setWatchlist(userData.watchlist)
+      setUserStats(userData.stats)
     } catch (error) {
-      console.error("Failed to fetch auctions:", error)
-    }
-  }
-
-  const loadUserData = () => {
-    // Load user bids and watchlist from localStorage or API
-    const savedBids = localStorage.getItem("userBids")
-    const savedWatchlist = localStorage.getItem("watchlist")
-
-    if (savedBids) {
-      setUserBids(JSON.parse(savedBids))
-    }
-    if (savedWatchlist) {
-      setWatchlist(JSON.parse(savedWatchlist))
+      console.error("Failed to fetch initial data:", error)
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -190,43 +186,73 @@ export default function BiddingDashboard() {
     setFilteredAuctions(filtered)
   }
 
-  const handleBidPlaced = (auctionId: string, amount: number, isAutoBid = false) => {
-    const auction = auctions.find((a) => a.id === auctionId)
-    if (!auction) return
+  const handleBidPlaced = async (auctionId: string, amount: number, isAutoBid = false) => {
+    try {
+      const response = await fetch("/api/auction/bid", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          auctionId,
+          amount,
+          bidder: "Current User",
+          maxBid: isAutoBid ? autoBidSettings.stopAt : undefined,
+          autoBid: isAutoBid,
+        }),
+      })
 
-    const newBid: UserBid = {
-      id: `bid-${Date.now()}`,
-      auctionId,
-      auctionName: auction.name,
-      amount,
-      timestamp: Date.now(),
-      status: "winning",
-      autoBid: isAutoBid,
+      const data = await response.json()
+
+      if (data.success) {
+        // Refresh data after successful bid
+        await fetchInitialData()
+
+        // Show success notification
+        const newNotification = {
+          id: `notif-${Date.now()}`,
+          type: "winning" as const,
+          title: "Bid Placed Successfully",
+          message: `Your bid of $${amount} has been placed on "${data.auction.name}"`,
+          timestamp: Date.now(),
+          read: false,
+          auctionId,
+          urgent: false,
+        }
+        setNotifications((prev) => [newNotification, ...prev])
+      } else {
+        alert(data.error || "Failed to place bid")
+      }
+    } catch (error) {
+      console.error("Failed to place bid:", error)
+      alert("Failed to place bid. Please try again.")
     }
-
-    const updatedBids = [...userBids, newBid]
-    setUserBids(updatedBids)
-    localStorage.setItem("userBids", JSON.stringify(updatedBids))
-
-    fetchAuctions() // Refresh auction data
   }
 
-  const toggleWatchlist = (auctionId: string) => {
+  const toggleWatchlist = async (auctionId: string) => {
     const isWatched = watchlist.some((item) => item.auctionId === auctionId)
+    const action = isWatched ? "remove" : "add"
 
-    if (isWatched) {
-      const updated = watchlist.filter((item) => item.auctionId !== auctionId)
-      setWatchlist(updated)
-      localStorage.setItem("watchlist", JSON.stringify(updated))
-    } else {
-      const newItem: WatchlistItem = {
-        id: `watch-${Date.now()}`,
-        auctionId,
-        addedAt: Date.now(),
+    try {
+      const response = await fetch("/api/user/watchlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ auctionId, action }),
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        setWatchlist(data.watchlist)
+        // Update stats
+        setUserStats((prev) => ({
+          ...prev,
+          watchlistItems: data.watchlist.length,
+        }))
+      } else {
+        alert(data.error || "Failed to update watchlist")
       }
-      const updated = [...watchlist, newItem]
-      setWatchlist(updated)
-      localStorage.setItem("watchlist", JSON.stringify(updated))
+    } catch (error) {
+      console.error("Failed to update watchlist:", error)
+      alert("Failed to update watchlist. Please try again.")
     }
   }
 
@@ -271,6 +297,22 @@ export default function BiddingDashboard() {
       default:
         return <Bell className="h-4 w-4 text-gray-500" />
     }
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-maroon-50">
+        <Navbar />
+        <div className="max-w-7xl mx-auto px-4 py-8">
+          <div className="flex items-center justify-center h-64">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-maroon-600 mx-auto mb-4"></div>
+              <p className="text-gray-600">Loading auction data...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (

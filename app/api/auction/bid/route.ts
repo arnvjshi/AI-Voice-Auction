@@ -4,7 +4,7 @@ import { placeBid, getAuctionById } from "../data"
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { auctionId, amount, bidder = "Voice Agent User" } = body
+    const { auctionId, amount, bidder = "Anonymous User", maxBid, autoBid = false } = body
 
     // Validate required fields
     if (!auctionId || !amount) {
@@ -29,14 +29,18 @@ export async function POST(request: NextRequest) {
         {
           error: `Bid must be higher than current bid of $${auction.currentBid}`,
           currentBid: auction.currentBid,
-          minimumBid: auction.currentBid + 1,
+          minimumBid: auction.currentBid + 50, // Minimum increment of $50
         },
         { status: 400 },
       )
     }
 
     // Place the bid
-    const result = await placeBid(auctionId, bidAmount, bidder)
+    const result = await placeBid(auctionId, bidAmount, bidder, {
+      maxBid: maxBid ? Number.parseFloat(maxBid) : undefined,
+      autoBid,
+      bidderAvatar: "/placeholder.svg?height=40&width=40",
+    })
 
     if (result.success) {
       return NextResponse.json({
@@ -44,6 +48,7 @@ export async function POST(request: NextRequest) {
         message: `Bid of $${bidAmount} placed successfully`,
         auction: result.auction,
         bid: result.bid,
+        isWinning: bidAmount >= result.auction.currentBid,
       })
     } else {
       return NextResponse.json({ error: result.error }, { status: 400 })

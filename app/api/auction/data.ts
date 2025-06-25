@@ -552,7 +552,16 @@ export async function getAuctionStats() {
   }
 }
 
-export async function placeBid(auctionId: string, amount: number, bidder: string, bidderAvatar?: string) {
+export async function placeBid(
+  auctionId: string,
+  amount: number,
+  bidder: string,
+  options: {
+    maxBid?: number
+    autoBid?: boolean
+    bidderAvatar?: string
+  } = {},
+) {
   const auctionIndex = auctionData.findIndex((a) => a.id === auctionId)
 
   if (auctionIndex === -1) {
@@ -578,7 +587,9 @@ export async function placeBid(auctionId: string, amount: number, bidder: string
     amount,
     timestamp: Date.now(),
     bidder,
-    bidderAvatar: bidderAvatar || "/placeholder.svg?height=40&width=40",
+    bidderAvatar: options.bidderAvatar || "/placeholder.svg?height=40&width=40",
+    bidType: options.autoBid ? "auto" : "manual",
+    maxBid: options.maxBid,
   }
 
   // Update auction
@@ -588,6 +599,19 @@ export async function placeBid(auctionId: string, amount: number, bidder: string
     totalBids: auction.totalBids + 1,
     bidHistory: [...auction.bidHistory, newBid],
   }
+
+  // Import and add to user bids
+  const { addUserBid } = await import("../user/data")
+  await addUserBid({
+    auctionId,
+    auctionName: auction.name,
+    amount,
+    timestamp: Date.now(),
+    status: "winning",
+    maxBid: options.maxBid,
+    autoBid: options.autoBid,
+    bidder,
+  })
 
   return {
     success: true,
