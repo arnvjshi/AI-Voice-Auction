@@ -151,6 +151,9 @@ export default function BiddingDashboard() {
 
           if (data.type === "auction_update") {
             setAuctions(data.auctions)
+            if (data.userBids) {
+              setUserBids(data.userBids)
+            }
             setLastUpdate(data.timestamp)
             console.log("Auctions updated:", data.auctions.length, "items")
           } else if (data.type === "heartbeat") {
@@ -207,25 +210,35 @@ export default function BiddingDashboard() {
       setAuctions(auctionsData.auctions)
       console.log("Initial auctions loaded:", auctionsData.auctions.length)
 
-      // Fetch user data
+      // Fetch user data from auction/bid API
       try {
-        const userResponse = await fetch("/api/user/bids")
+        const userResponse = await fetch("/api/auction/bid")
         const userData = await userResponse.json()
-        setUserBids(userData.bids || [])
-        setWatchlist(userData.watchlist || [])
-        setUserStats(
-          userData.stats || {
-            totalBids: 0,
-            wonAuctions: 0,
-            watchlistItems: 0,
-            successRate: 0,
-            totalSpent: 0,
-            avgBid: 0,
-          },
-        )
-        console.log("User data loaded")
+        if (userData.success) {
+          setUserBids(userData.userBids || [])
+          setUserStats(
+            userData.userStats || {
+              totalBids: 0,
+              wonAuctions: 0,
+              watchlistItems: 0,
+              successRate: 0,
+              totalSpent: 0,
+              avgBid: 0,
+            },
+          )
+          console.log("User data loaded from auction API")
+        }
       } catch (userError) {
         console.log("User data not available, using defaults")
+      }
+
+      // Fetch watchlist separately (if needed)
+      try {
+        const watchlistResponse = await fetch("/api/user/watchlist")
+        const watchlistData = await watchlistResponse.json()
+        setWatchlist(watchlistData.watchlist || [])
+      } catch (watchlistError) {
+        console.log("Watchlist not available, using defaults")
       }
     } catch (error) {
       console.error("Failed to fetch initial data:", error)
@@ -288,6 +301,14 @@ export default function BiddingDashboard() {
       if (data.success) {
         console.log("Bid placed successfully:", data.message)
 
+        // Update local state immediately with returned data
+        if (data.userBids) {
+          setUserBids(data.userBids)
+        }
+        if (data.userStats) {
+          setUserStats(data.userStats)
+        }
+
         // Show success notification
         const newNotification = {
           id: `notif-${Date.now()}`,
@@ -301,8 +322,7 @@ export default function BiddingDashboard() {
         }
         setNotifications((prev) => [newNotification, ...prev])
 
-        // The real-time update will automatically refresh the data
-        // No need to manually fetch data here
+        // The real-time update will automatically refresh the auction data
       } else {
         console.error("Bid failed:", data.error)
         alert(data.error || "Failed to place bid")

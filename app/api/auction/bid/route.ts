@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { placeBid, getAuctionById } from "../data"
+import { placeBid, getAuctionById, getUserBids, getUserStats } from "../data"
 
 export async function POST(request: NextRequest) {
   try {
@@ -59,11 +59,18 @@ export async function POST(request: NextRequest) {
     console.log("Bid result:", result)
 
     if (result.success) {
+      // Get updated user data
+      const userBids = await getUserBids()
+      const userStats = await getUserStats()
+
       return NextResponse.json({
         success: true,
         message: `Bid of $${bidAmount} placed successfully`,
         auction: result.auction,
         bid: result.bid,
+        userBid: result.userBid,
+        userBids,
+        userStats,
         isWinning: bidAmount >= result.auction.currentBid,
       })
     } else {
@@ -72,5 +79,23 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("Error placing bid:", error)
     return NextResponse.json({ error: "Failed to place bid" }, { status: 500 })
+  }
+}
+
+// GET endpoint to fetch user bids and stats
+export async function GET() {
+  try {
+    const userBids = await getUserBids()
+    const userStats = await getUserStats()
+
+    return NextResponse.json({
+      success: true,
+      userBids,
+      userStats,
+      timestamp: Date.now(),
+    })
+  } catch (error) {
+    console.error("Error fetching user bid data:", error)
+    return NextResponse.json({ error: "Failed to fetch user data" }, { status: 500 })
   }
 }

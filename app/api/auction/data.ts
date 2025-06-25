@@ -21,12 +21,12 @@ let auctionData = [
       "Private collection, Paris (1890-1950); Estate sale, London (1950); Private collection, New York (1950-2024)",
     certificate: "Certificate of authenticity included",
     insurance: "Fully insured for $5,000",
-    image: "/placeholder.svg?height=400&width=600",
+    image: "/images/mountain-landscape-painting.jpg",
     images: [
-      "/placeholder.svg?height=400&width=600",
-      "/placeholder.svg?height=400&width=600",
-      "/placeholder.svg?height=400&width=600",
-      "/placeholder.svg?height=300&width=400",
+      "/images/mountain-landscape-painting.jpg",
+      "/images/mountain-landscape-painting.jpg",
+      "/images/mountain-landscape-painting.jpg",
+      "/images/mountain-landscape-painting.jpg",
     ],
     bidHistory: [
       {
@@ -112,12 +112,12 @@ let auctionData = [
     provenance: "Original owner family estate, Switzerland",
     serviceHistory: "Recently serviced by certified watchmaker (2023)",
     accessories: "Original chain, presentation box, service papers",
-    image: "/placeholder.svg?height=400&width=600",
+    image: "/images/patek-philippe-watch.jpg",
     images: [
-      "/placeholder.svg?height=400&width=600",
-      "/placeholder.svg?height=400&width=600",
-      "/placeholder.svg?height=400&width=600",
-      "/placeholder.svg?height=300&width=400",
+      "/images/patek-philippe-watch.jpg",
+      "/images/patek-philippe-watch.jpg",
+      "/images/patek-philippe-watch.jpg",
+      "/images/patek-philippe-watch.jpg",
     ],
     bidHistory: [
       {
@@ -201,12 +201,12 @@ let auctionData = [
     provenance: "Private library collection, Boston",
     rarity: "Several titles extremely rare in this condition",
     appraisal: "Professional appraisal available upon request",
-    image: "/placeholder.svg?height=400&width=600",
+    image: "/images/antique-books.jpg",
     images: [
-      "/placeholder.svg?height=400&width=600",
-      "/placeholder.svg?height=400&width=600",
-      "/placeholder.svg?height=400&width=600",
-      "/placeholder.svg?height=300&width=400",
+      "/images/antique-books.jpg",
+      "/images/antique-books.jpg",
+      "/images/antique-books.jpg",
+      "/images/antique-books.jpg",
     ],
     bidHistory: [
       {
@@ -381,12 +381,12 @@ let auctionData = [
     certification: "GIA certified center diamond",
     appraisal: "Recent appraisal: $15,000",
     provenance: "Estate jewelry from prominent New York family",
-    image: "/placeholder.svg?height=400&width=600",
+    image: "/images/art-deco-ring.jpg",
     images: [
-      "/placeholder.svg?height=400&width=600",
-      "/placeholder.svg?height=400&width=600",
-      "/placeholder.svg?height=400&width=600",
-      "/placeholder.svg?height=300&width=400",
+      "/images/art-deco-ring.jpg",
+      "/images/art-deco-ring.jpg",
+      "/images/art-deco-ring.jpg",
+      "/images/art-deco-ring.jpg",
     ],
     bidHistory: [
       {
@@ -462,12 +462,12 @@ let auctionData = [
     provenance: "Private collection, acquired in Hong Kong (1960s)",
     condition_report: "Minor age-appropriate wear, no chips or cracks",
     authentication: "Authenticated by Asian art specialist",
-    image: "/placeholder.svg?height=400&width=600",
+    image: "/images/ming-dynasty-vase.jpg",
     images: [
-      "/placeholder.svg?height=400&width=600",
-      "/placeholder.svg?height=400&width=600",
-      "/placeholder.svg?height=400&width=600",
-      "/placeholder.svg?height=300&width=400",
+      "/images/ming-dynasty-vase.jpg",
+      "/images/ming-dynasty-vase.jpg",
+      "/images/ming-dynasty-vase.jpg",
+      "/images/ming-dynasty-vase.jpg",
     ],
     bidHistory: [
       {
@@ -515,6 +515,19 @@ let auctionData = [
   },
 ]
 
+// User bid tracking - centralized through auction API
+let userBidData: Array<{
+  id: string
+  auctionId: string
+  auctionName: string
+  amount: number
+  timestamp: number
+  status: "winning" | "outbid" | "won" | "lost"
+  maxBid?: number
+  autoBid?: boolean
+  bidder: string
+}> = []
+
 // Real-time update subscribers
 const subscribers = new Set<(data: any) => void>()
 
@@ -529,6 +542,7 @@ function broadcastUpdate() {
   const updateData = {
     type: "auction_update",
     auctions: auctionData,
+    userBids: userBidData,
     stats: {
       totalItems: auctionData.length,
       activeBids: auctionData.filter((a) => a.status === "active").reduce((sum, a) => sum + a.totalBids, 0),
@@ -596,6 +610,30 @@ export async function getAuctionStats() {
   }
 }
 
+// Get user bids - now centralized
+export async function getUserBids() {
+  return userBidData
+}
+
+// Get user stats - calculated from centralized data
+export async function getUserStats() {
+  const totalBids = userBidData.length
+  const wonAuctions = userBidData.filter((bid) => bid.status === "won").length
+  const watchlistItems = 0 // Will be handled separately
+  const successRate = totalBids > 0 ? Math.round((wonAuctions / totalBids) * 100) : 0
+  const totalSpent = userBidData.filter((bid) => bid.status === "won").reduce((sum, bid) => sum + bid.amount, 0)
+  const avgBid = totalBids > 0 ? Math.round(userBidData.reduce((sum, bid) => sum + bid.amount, 0) / totalBids) : 0
+
+  return {
+    totalBids,
+    wonAuctions,
+    watchlistItems,
+    successRate,
+    totalSpent,
+    avgBid,
+  }
+}
+
 export async function placeBid(
   auctionId: string,
   amount: number,
@@ -645,24 +683,31 @@ export async function placeBid(
       bidHistory: [...auction.bidHistory, newBid],
     }
 
-    console.log(`Bid placed successfully: $${amount} on ${auction.name} by ${bidder}`)
-
-    // Add to user bids
-    try {
-      const { addUserBid } = await import("../user/data")
-      await addUserBid({
-        auctionId,
-        auctionName: auction.name,
-        amount,
-        timestamp: Date.now(),
-        status: "winning",
-        maxBid: options.maxBid,
-        autoBid: options.autoBid,
-        bidder,
-      })
-    } catch (error) {
-      console.log("Note: User bid tracking not available, but auction bid was successful")
+    // Add to user bid tracking
+    const userBid = {
+      id: `user-bid-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      auctionId,
+      auctionName: auction.name,
+      amount,
+      timestamp: Date.now(),
+      status: "winning" as const,
+      maxBid: options.maxBid,
+      autoBid: options.autoBid,
+      bidder,
     }
+
+    // Update existing user bids for this auction to "outbid"
+    userBidData = userBidData.map((bid) => {
+      if (bid.auctionId === auctionId && bid.bidder !== bidder) {
+        return { ...bid, status: "outbid" as const }
+      }
+      return bid
+    })
+
+    // Add new user bid
+    userBidData.push(userBid)
+
+    console.log(`Bid placed successfully: $${amount} on ${auction.name} by ${bidder}`)
 
     // Broadcast real-time update immediately
     broadcastUpdate()
@@ -671,6 +716,7 @@ export async function placeBid(
       success: true,
       auction: auctionData[auctionIndex],
       bid: newBid,
+      userBid,
     }
   } catch (error) {
     console.error("Error in placeBid:", error)
